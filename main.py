@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import random
+import pandas as pd
 from ucs import ucs
 from bfs import bfs
 from dfs import dfs
@@ -77,8 +78,11 @@ class Warehouse:
                 for pos in path_pkg + path_dropoff[1:]:
                     path_table[pos] = 'R'
                 path_table[drop_pos] = 'D'
+
+
+                path_table_df = pd.DataFrame(path_table)
                 st.write("Path Table:")
-                st.table(path_table)
+                st.table(path_table_df)
 
                 self.current_pos = drop_pos
 
