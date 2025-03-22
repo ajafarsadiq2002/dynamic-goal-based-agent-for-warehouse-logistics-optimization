@@ -152,6 +152,7 @@ class WarehouseSimulator:
                 **Obstacles Hit:** `{count1 + count2}`  
                 **Penalty Incurred:** `{penalty1 + penalty2}`  
                 **Reward Earned:** `+10`
+                **Path Taken:** `{full_path}`
                 """)
 
                 # 🗺️ Grid after delivery (showing robot at final location)
