@@ -1,28 +1,35 @@
 from queue import LifoQueue
 
-def dfs(grid, start, goal):
-    rows, cols = grid.shape
+def explore_dfs(warehouse_map, entry_point, target_location, trip_type='P'):
+    """DFS for warehouse navigation with obstacle penalty handling."""
+    total_rows, total_cols = warehouse_map.shape
     visited = set()
+    penalty = 0
+    penalty_count = 0
     stack = LifoQueue()
-    stack.put((start, [start]))  # position, path
+    stack.put((entry_point, [entry_point]))
+    visited.add(entry_point)
 
     while not stack.empty():
-        current, path = stack.get()
+        current_pos, path = stack.get()
+        if current_pos == target_location:
+            return path, len(path) - 1, penalty, penalty_count
 
-        if current == goal:
-            return path, len(path) - 1
+        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+            new_x, new_y = current_pos[0] + dx, current_pos[1] + dy
+            next_pos = (new_x, new_y)
 
-        if current in visited:
-            continue
+            if 0 <= new_x < total_rows and 0 <= new_y < total_cols and next_pos not in visited:
+                cell = warehouse_map[new_x, new_y]
 
-        visited.add(current)
+                if trip_type == 'P' and cell == 'O':
+                    continue
 
-        # Explore neighbors (up/down/left/right)
-        for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
-            nx, ny = current[0]+dx, current[1]+dy
-            if 0 <= nx < rows and 0 <= ny < cols and grid[nx, ny] != 'O':
-                next_pos = (nx, ny)
-                if next_pos not in visited:
-                    stack.put((next_pos, path+[next_pos]))
+                if trip_type == 'D' and cell == 'O':
+                    penalty += 5
+                    penalty_count += 1
 
-    return None, float('inf')  # No path found
+                visited.add(next_pos)
+                stack.put((next_pos, path + [next_pos]))
+
+    return None, float('inf'), penalty, penalty_count

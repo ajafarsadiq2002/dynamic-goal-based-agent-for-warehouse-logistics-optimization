@@ -1,28 +1,35 @@
 from queue import Queue
 
-def bfs(grid, start, goal):
-    rows, cols = grid.shape
-    visited = set()
-    queue = Queue()
-    queue.put((start, [start]))  # position, path
+def explore_bfs(warehouse_map, entry_point, target_location, trip_type='P'):
+    """BFS for warehouse navigation with obstacle penalty handling."""
+    total_rows, total_cols = warehouse_map.shape
+    explored = set()
+    penalty = 0
+    penalty_count = 0
+    q = Queue()
+    q.put((entry_point, [entry_point]))
+    explored.add(entry_point)
 
-    while not queue.empty():
-        current, path = queue.get()
+    while not q.empty():
+        current_pos, path = q.get()
+        if current_pos == target_location:
+            return path, len(path) - 1, penalty, penalty_count
 
-        if current == goal:
-            return path, len(path) - 1
+        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+            new_x, new_y = current_pos[0] + dx, current_pos[1] + dy
+            next_pos = (new_x, new_y)
 
-        if current in visited:
-            continue
+            if 0 <= new_x < total_rows and 0 <= new_y < total_cols and next_pos not in explored:
+                cell = warehouse_map[new_x, new_y]
 
-        visited.add(current)
+                if trip_type == 'P' and cell == 'O':
+                    continue  # Avoid obstacles during pickup
 
-        # Explore neighbors (up/down/left/right)
-        for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
-            nx, ny = current[0]+dx, current[1]+dy
-            if 0 <= nx < rows and 0 <= ny < cols and grid[nx, ny] != 'O':
-                next_pos = (nx, ny)
-                if next_pos not in visited:
-                    queue.put((next_pos, path+[next_pos]))
+                if trip_type == 'D' and cell == 'O':
+                    penalty += 5
+                    penalty_count += 1
 
-    return None, float('inf')  # No path found
+                explored.add(next_pos)
+                q.put((next_pos, path + [next_pos]))
+
+    return None, float('inf'), penalty, penalty_count

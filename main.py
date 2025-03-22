@@ -1,99 +1,182 @@
 import streamlit as st
 import numpy as np
 import random
-import pandas as pd
-from ucs import ucs
-from bfs import bfs
-from dfs import dfs
 
-class Warehouse:
+from ucs import explore_ucs
+from bfs import explore_bfs
+from dfs import explore_dfs
+
+class WarehouseSimulator:
     def __init__(self):
-        self.setup_sidebar()
-        self.initialize_warehouse()
-        self.robot_pos = (0, 0)
-        self.warehouse[self.robot_pos] = 'R'
-        self.package_positions = self.place_items('P', self.P)
-        self.dropoff_positions = self.place_items('D', self.P)
-        self.obstacle_positions = self.place_items('O', self.O)
-        self.total_cost = 0
-        self.reward_per_delivery = 10
-        self.penalty_obstacle_hit = -5
-        self.current_pos = self.robot_pos
+        self.configure_interface()
+        self.create_grid()
+        self.robot_start = (0, 0)
+        self.warehouse_layout[self.robot_start] = 'R'
+        self.package_spots = self.assign_positions('P', self.total_packages)
+        self.dropoff_spots = self.assign_positions('D', self.total_packages)
+        self.obstacle_spots = self.assign_positions('O', self.total_obstacles)
+        self.delivery_bonus = 10
+        self.collision_penalty = -5
+        self.reset_simulation_state()
 
-    def setup_sidebar(self):
-        st.title("Dynamic Goal-Based Agent for Warehouse Logistics Optimization")
-        st.sidebar.title("Setup Warehouse")
-        self.N = st.sidebar.number_input("Warehouse Rows (N)", min_value=5, max_value=10, value=8)
-        self.M = st.sidebar.number_input("Warehouse Columns (M)", min_value=5, max_value=10, value=8)
-        self.P = st.sidebar.number_input("Number of Packages (P)", min_value=2, max_value=6, value=3)
-        self.O = st.sidebar.number_input("Number of Obstacles (O)", min_value=1, max_value=10, value=5)
-        self.seed_value = st.sidebar.number_input("Random Seed", value=42)
-        random.seed(self.seed_value)
-        np.random.seed(self.seed_value)
-        self.algorithm = st.sidebar.selectbox("Choose Search Algorithm", ["UCS", "BFS", "DFS"])
+    def reset_simulation_state(self):
+        self.movement_cost = 0
+        self.penalty_total = 0
+        self.penalty_count = 0
+        self.total_reward = 0
+        self.current_location = self.robot_start
 
-    def initialize_warehouse(self):
-        self.warehouse = np.full((self.N, self.M), '-')
+    def configure_interface(self):
+        st.title("📦 Smart Warehouse Logistics Optimizer")
+        st.sidebar.title("🛠️ Simulation Settings")
+        self.grid_rows = st.sidebar.number_input("Grid Rows", 5, 10, value=8)
+        self.grid_cols = st.sidebar.number_input("Grid Columns", 5, 10, value=8)
+        self.total_packages = st.sidebar.number_input("Number of Packages", 2, 6, value=3)
+        self.total_obstacles = st.sidebar.number_input("Number of Obstacles", 1, 10, value=5)
+        self.random_seed = st.sidebar.number_input("Random Seed", value=42)
 
-    def place_items(self, symbol, count):
+        random.seed(self.random_seed)
+        np.random.seed(self.random_seed)
+
+        self.chosen_algorithm = st.sidebar.selectbox(
+            "Select Search Algorithm",
+            ["Uniform Cost Search", "Breadth-First Search", "Depth-First Search"]
+        )
+
+    def create_grid(self):
+        self.warehouse_layout = np.full((self.grid_rows, self.grid_cols), '-')
+
+    def assign_positions(self, marker, count):
         positions = []
         while len(positions) < count:
-            pos = (random.randint(0, self.N-1), random.randint(0, self.M-1))
-            if self.warehouse[pos] == '-':
-                self.warehouse[pos] = symbol
-                positions.append(pos)
+            x, y = random.randint(0, self.grid_rows - 1), random.randint(0, self.grid_cols - 1)
+            if self.warehouse_layout[x, y] == '-' and (x, y) != self.robot_start:
+                self.warehouse_layout[x, y] = marker
+                positions.append((x, y))
         return positions
 
-    def build_and_display_results(self):
-        if st.sidebar.button("Build Warehouse and Display Results"):
-            st.write("Initial Warehouse Configuration:")
-            st.table(self.warehouse)
+    def execute_simulation(self):
+        if st.sidebar.button("🚀 Run Simulation"):
+            self.reset_simulation_state()
 
-            st.markdown(f"<h2><b>Done Using {self.algorithm} Method:</b></h2>", unsafe_allow_html=True)
+            if len(self.package_spots) != len(self.dropoff_spots):
+                st.error("❌ Mismatch between packages and drop-off points!")
+                return
 
-            for pkg_pos, drop_pos in zip(self.package_positions, self.dropoff_positions):
+            # 🏭 Initial Layout
+            st.subheader("🏭 Initial Warehouse Layout")
+            st.table(self.warehouse_layout)
+
+            # 🗺️ Legend
+            st.markdown("### 🗺️ Legend:")
+            st.markdown("""
+            - `•` : Empty space  
+            - `O` : Obstacle  
+            - `P` : Package  
+            - `D` : Drop-off point  
+            - '🤖' : Robot's final position (after delivery)
+            - `R` : Robot position
+            """)
+
+            st.markdown("### Locations:")
+            cols = st.columns(3)
+
+            with cols[0]:
+                st.markdown("#### 📦 Packages")
+                for i, loc in enumerate(self.package_spots, 1):
+                    st.write(f"P{i}: {loc}")
+
+            with cols[1]:
+                st.markdown("#### 🎯 Drop-offs")
+                for i, loc in enumerate(self.dropoff_spots, 1):
+                    st.write(f"D{i}: {loc}")
+
+            with cols[2]:
+                st.markdown("#### ⛔ Obstacles")
+                for i, loc in enumerate(self.obstacle_spots, 1):
+                    st.write(f"O{i}: {loc}")
+
+
+            st.markdown("---")
+
+            # Algorithm name
+            st.markdown(f"### 🧠 Algorithm Selected: **{self.chosen_algorithm}**")
+
+            for i in range(self.total_packages):
+                pkg_location = self.package_spots[i]
+                drop_location = self.dropoff_spots[i]
+
+                if self.chosen_algorithm == "Uniform Cost Search":
+                    search_fn = explore_ucs
+                elif self.chosen_algorithm == "Breadth-First Search":
+                    search_fn = explore_bfs
+                else:
+                    search_fn = explore_dfs
+
                 # Path to package
-                if self.algorithm == "UCS":
-                    path_pkg, cost_pkg = ucs(self.warehouse, self.current_pos, pkg_pos)
-                    path_dropoff, cost_dropoff = ucs(self.warehouse, pkg_pos, drop_pos)
-                elif self.algorithm == "BFS":
-                    path_pkg, cost_pkg = bfs(self.warehouse, self.current_pos, pkg_pos)
-                    path_dropoff, cost_dropoff = bfs(self.warehouse, pkg_pos, drop_pos)
-                elif self.algorithm == "DFS":
-                    path_pkg, cost_pkg = dfs(self.warehouse, self.current_pos, pkg_pos)
-                    path_dropoff, cost_dropoff = dfs(self.warehouse, pkg_pos, drop_pos)
-
-                if path_pkg is None or path_dropoff is None:
-                    st.write(f"Cannot complete delivery from {self.current_pos} to {pkg_pos} to {drop_pos}")
+                path1, cost1, penalty1, count1 = search_fn(
+                    self.warehouse_layout, self.current_location, pkg_location, trip_type='P'
+                )
+                if path1 is None:
+                    st.warning(f"⚠️ No path to package {i+1} at {pkg_location}")
                     continue
 
-                self.total_cost += cost_pkg + cost_dropoff
+                self.movement_cost += cost1
+                self.penalty_total += penalty1
+                self.penalty_count += count1
+                self.current_location = pkg_location
 
-                st.write(f"\nDelivered package from {pkg_pos} to {drop_pos}")
-                st.write(f"Path taken: {path_pkg + path_dropoff[1:]}")
-                st.write(f"Cost for this delivery: {cost_pkg + cost_dropoff}")
+                # Path to drop-off
+                path2, cost2, penalty2, count2 = search_fn(
+                    self.warehouse_layout, self.current_location, drop_location, trip_type='D'
+                )
+                if path2 is None:
+                    st.warning(f"⚠️ No path to drop-off {i+1} at {drop_location}")
+                    continue
 
-                # Display the path in table format
-                path_table = np.full((self.N, self.M), '-')
-                for pos in path_pkg + path_dropoff[1:]:
-                    path_table[pos] = 'R'
-                path_table[drop_pos] = 'D'
+                self.movement_cost += cost2
+                self.penalty_total += penalty2
+                self.penalty_count += count2
+                self.total_reward += self.delivery_bonus
+                self.current_location = drop_location
 
+                full_path = path1 + path2[1:]
 
-                path_table_df = pd.DataFrame(path_table)
-                st.write("Path Table:")
-                st.table(path_table_df)
+                # 📦 Delivery Summary
+                st.markdown(f"""
+                ### 📦 Delivery {i+1} Summary
+                **Pickup From:** `{pkg_location}`  
+                **Drop-off To:** `{drop_location}`  
+                **Total Steps:** `{len(full_path) - 1}`  
+                **Movement Cost:** `{cost1 + cost2}`  
+                **Obstacles Hit:** `{count1 + count2}`  
+                **Penalty Incurred:** `{penalty1 + penalty2}`  
+                **Reward Earned:** `+10`
+                """)
 
-                self.current_pos = drop_pos
+                # 🗺️ Grid after delivery (showing robot at final location)
+                final_grid = np.full((self.grid_rows, self.grid_cols), '•')
+                for pos in self.package_spots: final_grid[pos] = 'P'
+                for pos in self.dropoff_spots: final_grid[pos] = 'D'
+                for pos in self.obstacle_spots: final_grid[pos] = 'O'
+                final_grid[drop_location] = '🤖'
 
-            total_reward = self.reward_per_delivery * self.P
-            final_score = total_reward - self.total_cost
+                st.write("🗺️ Warehouse Grid After Delivery:")
+                st.table(final_grid)
 
-            st.markdown("<h2><b>Final Results:</b></h2>", unsafe_allow_html=True)
-            st.write(f"Total Movement Cost: {self.total_cost}")
-            st.write(f"Total Reward: {total_reward}")
-            st.write(f"Final Score: {final_score}")
+                st.success(f"✅ Package {i+1} Delivered!")
+
+            # 🧾 Final Score Summary
+            final_score = self.total_reward - self.movement_cost - self.penalty_total
+
+            st.markdown("---")
+            st.markdown("## 🧾 Final Simulation Report")
+            st.write(f"📦 Total Packages Delivered: {self.total_packages}")
+            st.write(f"💰 Total Reward: {self.total_reward}")
+            st.write(f"🚶 Total Movement Cost: {self.movement_cost}")
+            st.write(f"⚠️ Obstacle Penalty: {self.penalty_total} (Hits: {self.penalty_count})")
+            st.success(f"🏁 Final Score: {final_score}")
 
 if __name__ == "__main__":
-    app = Warehouse()
-    app.build_and_display_results()
+    sim = WarehouseSimulator()
+    sim.execute_simulation()
